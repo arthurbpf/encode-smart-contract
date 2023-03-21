@@ -34,3 +34,8 @@ yarn-error.log*
 pnpm-lock.yaml
 *.md
 .husky/
+
+artifacts/
+cache/
+typechain/
+typechain-types/
