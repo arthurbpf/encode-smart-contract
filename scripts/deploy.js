@@ -6,9 +6,7 @@ const main = async () => {
 	console.log('Account balance: ', accountBalance.toString());
 
 	const Token = await hre.ethers.getContractFactory('Encode');
-	const portal = await Token.deploy({
-		value: hre.ethers.utils.parseEther('0.001')
-	});
+	const portal = await Token.deploy();
 
 	await portal.deployed();
 
