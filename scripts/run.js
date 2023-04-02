@@ -50,6 +50,10 @@ const main = async () => {
 	balance = await encodeContract.balanceOf(owner.address);
 	console.log('Balance of owner after transfer:', balance.toString());
 
+	let tokens = await encodeContract.getTokensOfOwner(owner.address);
+	console.log(owner.address);
+	console.log(tokens);
+
 	/*
 	let contractBalance = await hre.ethers.provider.getBalance(
 		waveContract.address

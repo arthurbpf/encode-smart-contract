@@ -4,11 +4,12 @@ pragma solidity ^0.8.19;
 
 import 'hardhat/console.sol';
 import '@openzeppelin/contracts/token/ERC721/ERC721.sol';
+import '@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol';
 import '@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol';
 import '@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol';
 import '@openzeppelin/contracts/utils/Counters.sol';
 
-contract Encode is ERC721, ERC721URIStorage, ERC721Burnable {
+contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 	using Counters for Counters.Counter;
 	Counters.Counter private _tokenIdCounter;
 
@@ -45,6 +46,17 @@ contract Encode is ERC721, ERC721URIStorage, ERC721Burnable {
 		_setTokenURI(tokenId, uri);
 	}
 
+	// The following functions are overrides required by Solidity.
+
+	function _beforeTokenTransfer(
+		address from,
+		address to,
+		uint256 tokenId,
+		uint256 batchSize
+	) internal override(ERC721, ERC721Enumerable) {
+		super._beforeTokenTransfer(from, to, tokenId, batchSize);
+	}
+
 	function _burn(
 		uint256 tokenId
 	) internal override(ERC721, ERC721URIStorage) {
@@ -55,6 +67,12 @@ contract Encode is ERC721, ERC721URIStorage, ERC721Burnable {
 		uint256 tokenId
 	) public view override(ERC721, ERC721URIStorage) returns (string memory) {
 		return super.tokenURI(tokenId);
+	}
+
+	function supportsInterface(
+		bytes4 interfaceId
+	) public view override(ERC721, ERC721Enumerable) returns (bool) {
+		return super.supportsInterface(interfaceId);
 	}
 
 	function createBuyingRequest(uint256 tokenId, uint256 offer) public {
@@ -88,9 +106,27 @@ contract Encode is ERC721, ERC721URIStorage, ERC721Burnable {
 		sellingListings[tokenId] = SellingListing(price, block.timestamp);
 	}
 
-	function getSellingListing(
+	function getSellingListings(
 		uint256 tokenId
 	) public view returns (SellingListing memory) {
 		return sellingListings[tokenId];
+	}
+
+	struct tokenInfo {
+		uint256 id;
+		string uri;
+	}
+
+	function getTokensOfOwner(
+		address addr
+	) public view returns (tokenInfo[] memory) {
+		uint256 balance = balanceOf(addr);
+		tokenInfo[] memory tokens = new tokenInfo[](balance);
+		for (uint256 i = 0; i < balance; i++) {
+			uint256 tokenId = tokenOfOwnerByIndex(addr, i);
+			tokens[i] = tokenInfo(tokenId, tokenURI(tokenId));
+		}
+
+		return tokens;
 	}
 }

@@ -8,6 +8,10 @@ const config: HardhatUserConfig = {
 		goerli: {
 			url: process.env.ALCHEMY_GOERLI_URL,
 			accounts: [process.env.GOERLI_WALLET_PRIVATE_KEY!]
+		},
+		sepolia: {
+			url: process.env.ALCHEMY_SEPOLIA_URL,
+			accounts: [process.env.SEPOLIA_WALLET_PRIVATE_KEY!]
 		}
 	}
 };
