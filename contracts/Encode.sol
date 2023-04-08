@@ -35,15 +35,33 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 	}
 
 	// maps address to selling listings
-	mapping(uint256 => SellingListing) public sellingListings;
+	mapping(uint256 => SellingListing) public sellingListing;
+
+	struct TokenMetadata {
+		uint256 creationDate;
+		string title;
+		string description;
+	}
+
+	mapping(uint256 => TokenMetadata) public tokenMetadata;
 
 	constructor() ERC721('Encode', 'ENC') {}
 
-	function safeMint(address to, string memory uri) public {
+	function safeMint(
+		address to,
+		string memory uri,
+		string memory title,
+		string memory description
+	) public {
 		uint256 tokenId = _tokenIdCounter.current();
 		_tokenIdCounter.increment();
+
 		_safeMint(to, tokenId);
 		_setTokenURI(tokenId, uri);
+
+		tokenMetadata[tokenId].creationDate = block.timestamp;
+		tokenMetadata[tokenId].title = title;
+		tokenMetadata[tokenId].description = description;
 	}
 
 	// The following functions are overrides required by Solidity.
@@ -103,30 +121,47 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		require(price > 0, 'Price must be greater than 0');
 
 		approve(address(this), tokenId);
-		sellingListings[tokenId] = SellingListing(price, block.timestamp);
+		sellingListing[tokenId] = SellingListing(price, block.timestamp);
 	}
 
 	function getSellingListings(
 		uint256 tokenId
 	) public view returns (SellingListing memory) {
-		return sellingListings[tokenId];
+		return sellingListing[tokenId];
 	}
 
-	struct tokenInfo {
+	struct TokenInfo {
 		uint256 id;
 		string uri;
+		address owner;
+		TokenMetadata metadata;
 	}
 
 	function getTokensOfOwner(
 		address addr
-	) public view returns (tokenInfo[] memory) {
+	) public view returns (TokenInfo[] memory) {
 		uint256 balance = balanceOf(addr);
-		tokenInfo[] memory tokens = new tokenInfo[](balance);
+		TokenInfo[] memory tokens = new TokenInfo[](balance);
 		for (uint256 i = 0; i < balance; i++) {
 			uint256 tokenId = tokenOfOwnerByIndex(addr, i);
-			tokens[i] = tokenInfo(tokenId, tokenURI(tokenId));
+
+			TokenMetadata memory metadata = tokenMetadata[tokenId];
+
+			tokens[i] = TokenInfo(
+				tokenId,
+				tokenURI(tokenId),
+				ownerOf(tokenId),
+				metadata
+			);
 		}
 
 		return tokens;
+	}
+
+	function getToken(uint256 tokenId) public view returns (TokenInfo memory) {
+		TokenMetadata memory metadata = tokenMetadata[tokenId];
+
+		return
+			TokenInfo(tokenId, tokenURI(tokenId), ownerOf(tokenId), metadata);
 	}
 }
