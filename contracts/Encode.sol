@@ -164,4 +164,23 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		return
 			TokenInfo(tokenId, tokenURI(tokenId), ownerOf(tokenId), metadata);
 	}
+
+	function listTokens() public view returns (TokenInfo[] memory) {
+		uint256 totalSupply = totalSupply();
+		TokenInfo[] memory tokens = new TokenInfo[](totalSupply);
+		for (uint256 i = 0; i < totalSupply; i++) {
+			uint256 tokenId = tokenByIndex(i);
+
+			TokenMetadata memory metadata = tokenMetadata[tokenId];
+
+			tokens[i] = TokenInfo(
+				tokenId,
+				tokenURI(tokenId),
+				ownerOf(tokenId),
+				metadata
+			);
+		}
+
+		return tokens;
+	}
 }
