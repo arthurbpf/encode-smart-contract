@@ -40,6 +40,6 @@
 	},
 	"lint-staged": {
 		"*.{ts,js,json,css,md}": "prettier --write",
-		"*.{sol}": "prettier --write --plugin=prettier-plugin-solidity"
+		"*.{sol}": "prettier --write"
 	}
 }
