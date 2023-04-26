@@ -12,6 +12,7 @@ import '@openzeppelin/contracts/utils/Counters.sol';
 contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 	using Counters for Counters.Counter;
 	Counters.Counter private _tokenIdCounter;
+	Counters.Counter private _buyingRequestIdCounter;
 
 	enum BuyingRequestStatus {
 		PENDING,
@@ -20,6 +21,7 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 	}
 
 	struct BuyingRequest {
+		uint256 id;
 		address buyer;
 		uint256 offer;
 		uint256 timestamp;
@@ -97,8 +99,12 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		require(ownerOf(tokenId) != msg.sender, 'You cannot buy your own NFT');
 		require(offer > 0, 'Offer must be greater than 0');
 
+		uint256 requestId = _buyingRequestIdCounter.current();
+		_buyingRequestIdCounter.increment();
+
 		buyingRequests[tokenId].push(
 			BuyingRequest(
+				requestId,
 				msg.sender,
 				offer,
 				block.timestamp,
@@ -111,6 +117,27 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		uint256 tokenId
 	) public view returns (BuyingRequest[] memory) {
 		return buyingRequests[tokenId];
+	}
+
+	function acceptBuyingRequest(uint256 tokenId, uint256 requestId) public {
+		require(
+			ownerOf(tokenId) == msg.sender,
+			'You cannot accept buying requests for NFTs that you do not own'
+		);
+
+		BuyingRequest[] storage requests = buyingRequests[tokenId];
+		for (uint256 i = 0; i < requests.length; i++) {
+			if (requests[i].id == requestId) {
+				requests[i].status = BuyingRequestStatus.ACCEPTED;
+				// transfer token
+				safeTransferFrom(msg.sender, requests[i].buyer, tokenId);
+
+				// transfer funds
+				payable(msg.sender).transfer(requests[i].offer);
+			} else {
+				requests[i].status = BuyingRequestStatus.REJECTED;
+			}
+		}
 	}
 
 	function createSellingListing(uint256 tokenId, uint256 price) public {
@@ -128,6 +155,24 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		uint256 tokenId
 	) public view returns (SellingListing memory) {
 		return sellingListing[tokenId];
+	}
+
+	function buyToken(uint256 tokenId) public payable {
+		require(ownerOf(tokenId) != msg.sender, 'You cannot buy your own NFT');
+		require(sellingListing[tokenId].price > 0, 'This NFT is not for sale');
+		require(
+			msg.value >= sellingListing[tokenId].price,
+			'You must send enough ETH to buy this NFT'
+		);
+
+		address seller = ownerOf(tokenId);
+		address buyer = msg.sender;
+
+		// transfer token
+		safeTransferFrom(seller, buyer, tokenId);
+
+		// transfer funds
+		payable(seller).transfer(msg.value);
 	}
 
 	struct TokenInfo {
