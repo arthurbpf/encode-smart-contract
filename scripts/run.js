@@ -34,13 +34,9 @@ const main = async () => {
 	}
 
 	try {
-		let legalTransferTxn = await encodeContract
-			.connect(randomPerson)
-			['safeTransferFrom(address,address,uint256)'](
-				randomPerson.address,
-				owner.address,
-				0
-			);
+		let legalTransferTxn = await encodeContract[
+			'safeTransferFrom(address,address,uint256)'
+		](owner.address, randomPerson.address, 0);
 
 		await legalTransferTxn.wait();
 	} catch (error) {
@@ -57,30 +53,38 @@ const main = async () => {
 		randomPerson.address
 	);
 	console.log(
-		'Balance of randomPerson before placing requests:',
+		'Balance of owner before placing requests:',
 		randomPersonBalance.toString()
 	);
 
-	let buyingRequestTxn = await encodeContract
-		.connect(randomPerson)
-		.createBuyingRequest(0, 100);
+	let buyingRequestTxn = await encodeContract.createBuyingRequest(0, {
+		value: hre.ethers.utils.parseEther('0.005')
+	});
 	await buyingRequestTxn.wait();
 
-	let buyingRequestTxn2 = await encodeContract
-		.connect(randomPerson)
-		.createBuyingRequest(0, 1000);
-	await buyingRequestTxn2.wait();
-
-	randomPersonBalance = await hre.ethers.provider.getBalance(
-		randomPerson.address
-	);
+	randomPersonBalance = await hre.ethers.provider.getBalance(owner.address);
 	console.log(
-		'Balance of randomPerson after placing requests:',
+		'Balance of owner after placing requests:',
 		randomPersonBalance.toString()
 	);
+
+	let contractBalance = await hre.ethers.provider.getBalance(
+		encodeContract.address
+	);
+	console.log('Contract balance:', contractBalance.toString());
 
 	let getBuyingRequests = await encodeContract.getBuyingRequests(0);
 	console.log(getBuyingRequests);
+
+	const acceptRequestTxn = await encodeContract
+		.connect(randomPerson)
+		.acceptBuyingRequest(0, 0);
+	acceptRequestTxn.wait();
+
+	contractBalance = await hre.ethers.provider.getBalance(
+		encodeContract.address
+	);
+	console.log('Contract balance:', contractBalance.toString());
 };
 
 const runMain = async () => {

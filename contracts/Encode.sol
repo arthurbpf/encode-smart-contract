@@ -14,6 +14,12 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 	Counters.Counter private _tokenIdCounter;
 	Counters.Counter private _buyingRequestIdCounter;
 
+	// map address to eth balance
+	mapping(address => uint256) public balances;
+
+	// event to be fired when a user sends eth to the contract
+	event Received(address indexed sender, uint256 amount);
+
 	enum BuyingRequestStatus {
 		PENDING,
 		ACCEPTED,
@@ -95,9 +101,29 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		return super.supportsInterface(interfaceId);
 	}
 
-	function createBuyingRequest(uint256 tokenId, uint256 offer) public {
+	// Custom functions
+
+	receive() external payable {
+		emit Received(msg.sender, msg.value);
+	}
+
+	function createBuyingRequest(uint256 tokenId) public payable {
 		require(ownerOf(tokenId) != msg.sender, 'You cannot buy your own NFT');
-		require(offer > 0, 'Offer must be greater than 0');
+		require(msg.value > 0, 'Offer must be greater than 0');
+
+		// check if there is no other pending request from same buyer
+		BuyingRequest[] storage requests = buyingRequests[tokenId];
+		for (uint256 i = 0; i < requests.length; i++) {
+			if (requests[i].buyer == msg.sender) {
+				require(
+					requests[i].status != BuyingRequestStatus.PENDING,
+					'You already have a pending buying request for this NFT'
+				);
+			}
+		}
+
+		payable(address(this)).transfer(msg.value);
+		balances[msg.sender] += msg.value;
 
 		uint256 requestId = _buyingRequestIdCounter.current();
 		_buyingRequestIdCounter.increment();
@@ -106,11 +132,30 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 			BuyingRequest(
 				requestId,
 				msg.sender,
-				offer,
+				msg.value,
 				block.timestamp,
 				BuyingRequestStatus.PENDING
 			)
 		);
+	}
+
+	function cancelBuyingRequest(uint256 tokenId, uint256 requestId) public {
+		BuyingRequest[] storage requests = buyingRequests[tokenId];
+		for (uint256 i = 0; i < requests.length; i++) {
+			if (requests[i].id == requestId) {
+				require(
+					requests[i].buyer == msg.sender,
+					'You cannot cancel buying requests that you did not create'
+				);
+				require(
+					requests[i].status == BuyingRequestStatus.PENDING,
+					'You cannot cancel buying requests that are not pending'
+				);
+
+				requests[i].status = BuyingRequestStatus.REJECTED;
+				payable(msg.sender).transfer(requests[i].offer);
+			}
+		}
 	}
 
 	function getBuyingRequests(
@@ -129,13 +174,14 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		for (uint256 i = 0; i < requests.length; i++) {
 			if (requests[i].id == requestId) {
 				requests[i].status = BuyingRequestStatus.ACCEPTED;
-				// transfer token
-				safeTransferFrom(msg.sender, requests[i].buyer, tokenId);
-
 				// transfer funds
 				payable(msg.sender).transfer(requests[i].offer);
+
+				// transfer token
+				safeTransferFrom(msg.sender, requests[i].buyer, tokenId);
 			} else {
 				requests[i].status = BuyingRequestStatus.REJECTED;
+				payable(requests[i].buyer).transfer(requests[i].offer);
 			}
 		}
 	}
