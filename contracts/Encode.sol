@@ -101,6 +101,19 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		return super.supportsInterface(interfaceId);
 	}
 
+	// Custom overrides
+	function safeTransferFrom(
+		address _from,
+		address _to,
+		uint256 _tokenId
+	) public payable override {
+		delete buyingRequests[_tokenId];
+		delete sellingListing[_tokenId];
+
+		// Call the parent implementation of the function
+		super.safeTransferFrom(_from, _to, _tokenId);
+	}
+
 	// Custom functions
 
 	receive() external payable {
@@ -195,6 +208,16 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 
 		approve(address(this), tokenId);
 		sellingListing[tokenId] = SellingListing(price, block.timestamp);
+	}
+
+	function cancelSellingListing(uint256 tokenId) public {
+		require(
+			ownerOf(tokenId) == msg.sender,
+			'You cannot cancel selling listings for NFTs that you do not own'
+		);
+
+		approve(address(0), tokenId);
+		delete sellingListing[tokenId];
 	}
 
 	function getSellingListings(
