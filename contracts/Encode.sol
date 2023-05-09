@@ -53,6 +53,14 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 
 	mapping(uint256 => TokenMetadata) public tokenMetadata;
 
+	struct TokenInfo {
+		uint256 id;
+		string uri;
+		address owner;
+		TokenMetadata metadata;
+		SellingListing sellingListing;
+	}
+
 	constructor() ERC721('Encode', 'ENC') {}
 
 	function safeMint(
@@ -106,7 +114,7 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		address _from,
 		address _to,
 		uint256 _tokenId
-	) public payable override {
+	) public override(ERC721, IERC721) {
 		delete buyingRequests[_tokenId];
 		delete sellingListing[_tokenId];
 
@@ -220,12 +228,6 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		delete sellingListing[tokenId];
 	}
 
-	function getSellingListings(
-		uint256 tokenId
-	) public view returns (SellingListing memory) {
-		return sellingListing[tokenId];
-	}
-
 	function buyToken(uint256 tokenId) public payable {
 		require(ownerOf(tokenId) != msg.sender, 'You cannot buy your own NFT');
 		require(sellingListing[tokenId].price > 0, 'This NFT is not for sale');
@@ -244,13 +246,6 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		payable(seller).transfer(msg.value);
 	}
 
-	struct TokenInfo {
-		uint256 id;
-		string uri;
-		address owner;
-		TokenMetadata metadata;
-	}
-
 	function getTokensOfOwner(
 		address addr
 	) public view returns (TokenInfo[] memory) {
@@ -260,12 +255,14 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 			uint256 tokenId = tokenOfOwnerByIndex(addr, i);
 
 			TokenMetadata memory metadata = tokenMetadata[tokenId];
+			SellingListing memory listing = sellingListing[tokenId];
 
 			tokens[i] = TokenInfo(
 				tokenId,
 				tokenURI(tokenId),
 				ownerOf(tokenId),
-				metadata
+				metadata,
+				listing
 			);
 		}
 
@@ -274,9 +271,16 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 
 	function getToken(uint256 tokenId) public view returns (TokenInfo memory) {
 		TokenMetadata memory metadata = tokenMetadata[tokenId];
+		SellingListing memory listing = sellingListing[tokenId];
 
 		return
-			TokenInfo(tokenId, tokenURI(tokenId), ownerOf(tokenId), metadata);
+			TokenInfo(
+				tokenId,
+				tokenURI(tokenId),
+				ownerOf(tokenId),
+				metadata,
+				listing
+			);
 	}
 
 	function listTokens() public view returns (TokenInfo[] memory) {
@@ -286,12 +290,14 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 			uint256 tokenId = tokenByIndex(i);
 
 			TokenMetadata memory metadata = tokenMetadata[tokenId];
+			SellingListing memory listing = sellingListing[tokenId];
 
 			tokens[i] = TokenInfo(
 				tokenId,
 				tokenURI(tokenId),
 				ownerOf(tokenId),
-				metadata
+				metadata,
+				listing
 			);
 		}
 
