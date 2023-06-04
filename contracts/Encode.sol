@@ -182,7 +182,27 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 	function getBuyingRequests(
 		uint256 tokenId
 	) public view returns (BuyingRequest[] memory) {
-		return buyingRequests[tokenId];
+		// return buyingRequests with pending status
+		BuyingRequest[] storage requests = buyingRequests[tokenId];
+		BuyingRequest[] memory pendingRequests = new BuyingRequest[](
+			requests.length
+		);
+		uint256 pendingRequestsCount = 0;
+		for (uint256 i = 0; i < requests.length; i++) {
+			if (requests[i].status == BuyingRequestStatus.PENDING) {
+				pendingRequests[pendingRequestsCount] = requests[i];
+				pendingRequestsCount++;
+			}
+		}
+
+		BuyingRequest[] memory result = new BuyingRequest[](
+			pendingRequestsCount
+		);
+		for (uint256 i = 0; i < pendingRequestsCount; i++) {
+			result[i] = pendingRequests[i];
+		}
+
+		return result;
 	}
 
 	function acceptBuyingRequest(uint256 tokenId, uint256 requestId) public {
@@ -240,7 +260,10 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		address buyer = msg.sender;
 
 		// transfer token
-		safeTransferFrom(seller, buyer, tokenId);
+		_transfer(seller, buyer, tokenId);
+
+		// delete listing
+		delete sellingListing[tokenId];
 
 		// transfer funds
 		payable(seller).transfer(msg.value);

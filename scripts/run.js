@@ -85,6 +85,14 @@ const main = async () => {
 		encodeContract.address
 	);
 	console.log('Contract balance:', contractBalance.toString());
+
+	const createSellingTxn = await encodeContract.createSellingListing(0, 1);
+	createSellingTxn.wait();
+
+	const buyTokenTxn = await encodeContract
+		.connect(randomPerson)
+		.acceptBuyingRequest(0, { value: hre.ethers.utils.parseEther('0.005') });
+	buyTokenTxn.wait();
 };
 
 const runMain = async () => {
