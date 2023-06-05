@@ -259,6 +259,15 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		address seller = ownerOf(tokenId);
 		address buyer = msg.sender;
 
+		// cancel all buying buyingRequests
+		BuyingRequest[] storage requests = buyingRequests[tokenId];
+		for (uint256 i = 0; i < requests.length; i++) {
+			if (requests[i].status == BuyingRequestStatus.PENDING) {
+				requests[i].status = BuyingRequestStatus.REJECTED;
+				payable(requests[i].buyer).transfer(requests[i].offer);
+			}
+		}
+
 		// transfer token
 		_transfer(seller, buyer, tokenId);
 
