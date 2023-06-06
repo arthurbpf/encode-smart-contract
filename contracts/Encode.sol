@@ -213,6 +213,10 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 
 		BuyingRequest[] storage requests = buyingRequests[tokenId];
 		for (uint256 i = 0; i < requests.length; i++) {
+			if (requests[i].status != BuyingRequestStatus.PENDING) {
+				continue;
+			}
+
 			if (requests[i].id == requestId) {
 				requests[i].status = BuyingRequestStatus.ACCEPTED;
 				// transfer funds
