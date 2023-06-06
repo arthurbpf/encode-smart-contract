@@ -33,6 +33,7 @@ Para criar a conta, faça o download da extensão MetaMask para o seu navegador,
 Após criar a conta, selecione a opção "Account Details" e copie a chave privada da conta.
 
 ![Exportando a chave privada](./docs/media/01_metamask_account_details.png)
+
 Cole essa chave privada em um arquivo .env na raiz do projeto, com o nome de `SEPOLIA_WALLET_PRIVATE_KEY`.
 
 #### Adicionando saldo na Carteira
