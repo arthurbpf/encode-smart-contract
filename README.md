@@ -4,6 +4,8 @@
 
 Este repositório contém o smart contract da aplicação Encode.
 
+Este contrato inteligente está disponível na testnet Sepolia sob o endereço ``0x7dF501cdE84e5D5ef3DA900f55dCd0075f35d7e4
+
 Este arquivo irá detalhar os passos necessários para realizar o deploy do contrato inteligente na testnet Sepolia da rede Ethereum.
 
 ## Pré-requisitos
@@ -42,7 +44,7 @@ Para adicionar saldo na carteira, acesse o site [https://sepoliafaucet.com/](htt
 
 É permitido adicionar 0.5 Sepolia ETH por dia.
 
-### Deploy do contrato
+## Deploy do contrato
 
 Para realizar o deploy do contrato, é necessário ter o Node.js instalado na máquina. Para o desenvolvimento, foi utilizada a versão 18.15.0 LTS da ferramenta.
 
