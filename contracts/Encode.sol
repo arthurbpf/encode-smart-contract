@@ -332,6 +332,14 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		payable(seller).transfer(msg.value);
 	}
 
+	function getSellingListings(
+		uint256 tokenId
+	) public view returns (SellingListing[] memory) {
+		TokenMetadata memory metadata = tokenMetadata[tokenId];
+
+		return sellingListings[tokenId][metadata.timesSold];
+	}
+
 	// Token listing functions
 
 	struct TokenInfo {
