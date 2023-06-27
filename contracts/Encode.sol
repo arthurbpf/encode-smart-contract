@@ -12,7 +12,6 @@ import '@openzeppelin/contracts/utils/Counters.sol';
 contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 	using Counters for Counters.Counter;
 	Counters.Counter private _tokenIdCounter;
-	Counters.Counter private _buyingRequestIdCounter;
 
 	// map address to eth balance
 	mapping(address => uint256) public balances;
@@ -22,44 +21,49 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 
 	enum BuyingRequestStatus {
 		PENDING,
+		CANCELED,
 		ACCEPTED,
 		REJECTED
 	}
 
 	struct BuyingRequest {
-		uint256 id;
 		address buyer;
 		uint256 offer;
 		uint256 timestamp;
 		BuyingRequestStatus status;
 	}
 
-	// maps token id to buying requests
-	mapping(uint256 => BuyingRequest[]) public buyingRequests;
+	// maps token id to buying requests, the first array is for the selling iteration, while the second is the request id
+	mapping(uint256 => mapping(uint256 => BuyingRequest[]))
+		public buyingRequests;
 
-	struct SellingListing {
-		uint256 price;
-		uint256 timestamp;
+	enum SellingListingStatus {
+		PENDING,
+		CANCELED,
+		ACCEPTED
 	}
 
-	// maps address to selling listings
-	mapping(uint256 => SellingListing) public sellingListing;
+	struct SellingListing {
+		address seller;
+		uint256 price;
+		uint256 timestamp;
+		SellingListingStatus status;
+	}
+
+	// maps token id to selling listings, the first array is for the selling iteration, while the second is the listing id
+	mapping(uint256 => mapping(uint256 => SellingListing[]))
+		public sellingListings;
 
 	struct TokenMetadata {
+		address author;
 		uint256 creationDate;
 		string title;
 		string description;
+		uint256 timesSold;
 	}
 
+	// maps token id to metadata
 	mapping(uint256 => TokenMetadata) public tokenMetadata;
-
-	struct TokenInfo {
-		uint256 id;
-		string uri;
-		address owner;
-		TokenMetadata metadata;
-		SellingListing sellingListing;
-	}
 
 	constructor() ERC721('Encode', 'ENC') {}
 
@@ -75,9 +79,12 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		_safeMint(to, tokenId);
 		_setTokenURI(tokenId, uri);
 
-		tokenMetadata[tokenId].creationDate = block.timestamp;
-		tokenMetadata[tokenId].title = title;
-		tokenMetadata[tokenId].description = description;
+		TokenMetadata storage metadata = tokenMetadata[tokenId];
+
+		metadata.creationDate = block.timestamp;
+		metadata.title = title;
+		metadata.description = description;
+		metadata.timesSold = 0;
 	}
 
 	// The following functions are overrides required by Solidity.
@@ -88,6 +95,32 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		uint256 tokenId,
 		uint256 batchSize
 	) internal override(ERC721, ERC721Enumerable) {
+		if (from != address(0) && to != address(0)) {
+			TokenMetadata storage metadata = tokenMetadata[tokenId];
+			BuyingRequest[] storage requests = buyingRequests[tokenId][
+				metadata.timesSold
+			];
+
+			for (uint256 i = 0; i < requests.length; i++) {
+				if (requests[i].status == BuyingRequestStatus.PENDING) {
+					requests[i].status = BuyingRequestStatus.REJECTED;
+					payable(requests[i].buyer).transfer(requests[i].offer);
+				}
+			}
+
+			SellingListing[] storage listings = sellingListings[tokenId][
+				metadata.timesSold
+			];
+
+			for (uint256 i = 0; i < listings.length; i++) {
+				if (listings[i].status == SellingListingStatus.PENDING) {
+					listings[i].status = SellingListingStatus.CANCELED;
+				}
+			}
+
+			metadata.timesSold += 1;
+		}
+
 		super._beforeTokenTransfer(from, to, tokenId, batchSize);
 	}
 
@@ -109,31 +142,23 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		return super.supportsInterface(interfaceId);
 	}
 
-	// Custom overrides
-	function safeTransferFrom(
-		address _from,
-		address _to,
-		uint256 _tokenId
-	) public override(ERC721, IERC721) {
-		delete buyingRequests[_tokenId];
-		delete sellingListing[_tokenId];
-
-		// Call the parent implementation of the function
-		super.safeTransferFrom(_from, _to, _tokenId);
-	}
-
-	// Custom functions
-
 	receive() external payable {
 		emit Received(msg.sender, msg.value);
 	}
 
+	// Custom functions
+
+	// Buying requests handling
 	function createBuyingRequest(uint256 tokenId) public payable {
 		require(ownerOf(tokenId) != msg.sender, 'You cannot buy your own NFT');
 		require(msg.value > 0, 'Offer must be greater than 0');
 
+		TokenMetadata memory metadata = tokenMetadata[tokenId];
+
 		// check if there is no other pending request from same buyer
-		BuyingRequest[] storage requests = buyingRequests[tokenId];
+		BuyingRequest[] memory requests = buyingRequests[tokenId][
+			metadata.timesSold
+		];
 		for (uint256 i = 0; i < requests.length; i++) {
 			if (requests[i].buyer == msg.sender) {
 				require(
@@ -146,12 +171,8 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		payable(address(this)).transfer(msg.value);
 		balances[msg.sender] += msg.value;
 
-		uint256 requestId = _buyingRequestIdCounter.current();
-		_buyingRequestIdCounter.increment();
-
-		buyingRequests[tokenId].push(
+		buyingRequests[tokenId][metadata.timesSold].push(
 			BuyingRequest(
-				requestId,
 				msg.sender,
 				msg.value,
 				block.timestamp,
@@ -161,48 +182,22 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 	}
 
 	function cancelBuyingRequest(uint256 tokenId, uint256 requestId) public {
-		BuyingRequest[] storage requests = buyingRequests[tokenId];
-		for (uint256 i = 0; i < requests.length; i++) {
-			if (requests[i].id == requestId) {
-				require(
-					requests[i].buyer == msg.sender,
-					'You cannot cancel buying requests that you did not create'
-				);
-				require(
-					requests[i].status == BuyingRequestStatus.PENDING,
-					'You cannot cancel buying requests that are not pending'
-				);
+		TokenMetadata memory metadata = tokenMetadata[tokenId];
+		BuyingRequest storage request = buyingRequests[tokenId][
+			metadata.timesSold
+		][requestId];
 
-				requests[i].status = BuyingRequestStatus.REJECTED;
-				payable(msg.sender).transfer(requests[i].offer);
-			}
-		}
-	}
-
-	function getBuyingRequests(
-		uint256 tokenId
-	) public view returns (BuyingRequest[] memory) {
-		// return buyingRequests with pending status
-		BuyingRequest[] storage requests = buyingRequests[tokenId];
-		BuyingRequest[] memory pendingRequests = new BuyingRequest[](
-			requests.length
+		require(
+			request.buyer == msg.sender,
+			'You cannot cancel buying requests that you did not create'
 		);
-		uint256 pendingRequestsCount = 0;
-		for (uint256 i = 0; i < requests.length; i++) {
-			if (requests[i].status == BuyingRequestStatus.PENDING) {
-				pendingRequests[pendingRequestsCount] = requests[i];
-				pendingRequestsCount++;
-			}
-		}
-
-		BuyingRequest[] memory result = new BuyingRequest[](
-			pendingRequestsCount
+		require(
+			request.status == BuyingRequestStatus.PENDING,
+			'You cannot cancel buying requests that are not pending'
 		);
-		for (uint256 i = 0; i < pendingRequestsCount; i++) {
-			result[i] = pendingRequests[i];
-		}
 
-		return result;
+		request.status = BuyingRequestStatus.CANCELED;
+		payable(msg.sender).transfer(request.offer);
 	}
 
 	function acceptBuyingRequest(uint256 tokenId, uint256 requestId) public {
@@ -211,13 +206,16 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 			'You cannot accept buying requests for NFTs that you do not own'
 		);
 
-		BuyingRequest[] storage requests = buyingRequests[tokenId];
+		TokenMetadata memory metadata = tokenMetadata[tokenId];
+		BuyingRequest[] storage requests = buyingRequests[tokenId][
+			metadata.timesSold
+		];
 		for (uint256 i = 0; i < requests.length; i++) {
 			if (requests[i].status != BuyingRequestStatus.PENDING) {
 				continue;
 			}
 
-			if (requests[i].id == requestId) {
+			if (i == requestId) {
 				requests[i].status = BuyingRequestStatus.ACCEPTED;
 				// transfer funds
 				payable(msg.sender).transfer(requests[i].offer);
@@ -231,6 +229,16 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		}
 	}
 
+	function getBuyingRequests(
+		uint256 tokenId
+	) public view returns (BuyingRequest[] memory) {
+		TokenMetadata memory metadata = tokenMetadata[tokenId];
+
+		return buyingRequests[tokenId][metadata.timesSold];
+	}
+
+	// Selling listings handling
+
 	function createSellingListing(uint256 tokenId, uint256 price) public {
 		require(
 			ownerOf(tokenId) == msg.sender,
@@ -238,8 +246,26 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 		);
 		require(price > 0, 'Price must be greater than 0');
 
+		TokenMetadata memory metadata = tokenMetadata[tokenId];
+		SellingListing[] storage listings = sellingListings[tokenId][
+			metadata.timesSold
+		];
+
+		for (uint256 i = 0; i < listings.length; i++) {
+			if (listings[i].status == SellingListingStatus.PENDING) {
+				listings[i].status = SellingListingStatus.CANCELED;
+			}
+		}
+
 		approve(address(this), tokenId);
-		sellingListing[tokenId] = SellingListing(price, block.timestamp);
+		listings.push(
+			SellingListing(
+				msg.sender,
+				price,
+				block.timestamp,
+				SellingListingStatus.PENDING
+			)
+		);
 	}
 
 	function cancelSellingListing(uint256 tokenId) public {
@@ -248,66 +274,85 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 			'You cannot cancel selling listings for NFTs that you do not own'
 		);
 
+		TokenMetadata memory metadata = tokenMetadata[tokenId];
+		SellingListing[] storage listings = sellingListings[tokenId][
+			metadata.timesSold
+		];
+
+		require(
+			listings.length > 0,
+			'There is no selling listing for this NFT'
+		);
+
+		SellingListing storage listing = listings[listings.length - 1];
+
+		require(
+			listing.status == SellingListingStatus.PENDING,
+			'The selling listing must be pending'
+		);
+
 		approve(address(0), tokenId);
-		delete sellingListing[tokenId];
+		listing.status = SellingListingStatus.CANCELED;
 	}
 
 	function buyToken(uint256 tokenId) public payable {
 		require(ownerOf(tokenId) != msg.sender, 'You cannot buy your own NFT');
-		require(sellingListing[tokenId].price > 0, 'This NFT is not for sale');
+
+		TokenMetadata memory metadata = tokenMetadata[tokenId];
+		SellingListing[] storage listings = sellingListings[tokenId][
+			metadata.timesSold
+		];
+
 		require(
-			msg.value >= sellingListing[tokenId].price,
+			listings.length > 0,
+			'There is no selling listing for this NFT'
+		);
+
+		SellingListing storage listing = listings[listings.length - 1];
+
+		require(
+			listing.status == SellingListingStatus.PENDING,
+			'The selling listing must be pending'
+		);
+
+		require(
+			msg.value >= listing.price,
 			'You must send enough ETH to buy this NFT'
 		);
+
+		listing.status = SellingListingStatus.ACCEPTED;
 
 		address seller = ownerOf(tokenId);
 		address buyer = msg.sender;
 
-		// cancel all buying buyingRequests
-		BuyingRequest[] storage requests = buyingRequests[tokenId];
-		for (uint256 i = 0; i < requests.length; i++) {
-			if (requests[i].status == BuyingRequestStatus.PENDING) {
-				requests[i].status = BuyingRequestStatus.REJECTED;
-				payable(requests[i].buyer).transfer(requests[i].offer);
-			}
-		}
-
 		// transfer token
 		_transfer(seller, buyer, tokenId);
-
-		// delete listing
-		delete sellingListing[tokenId];
 
 		// transfer funds
 		payable(seller).transfer(msg.value);
 	}
 
-	function getTokensOfOwner(
-		address addr
-	) public view returns (TokenInfo[] memory) {
-		uint256 balance = balanceOf(addr);
-		TokenInfo[] memory tokens = new TokenInfo[](balance);
-		for (uint256 i = 0; i < balance; i++) {
-			uint256 tokenId = tokenOfOwnerByIndex(addr, i);
+	// Token listing functions
 
-			TokenMetadata memory metadata = tokenMetadata[tokenId];
-			SellingListing memory listing = sellingListing[tokenId];
-
-			tokens[i] = TokenInfo(
-				tokenId,
-				tokenURI(tokenId),
-				ownerOf(tokenId),
-				metadata,
-				listing
-			);
-		}
-
-		return tokens;
+	struct TokenInfo {
+		uint256 id;
+		string uri;
+		address owner;
+		TokenMetadata metadata;
+		SellingListing sellingListing;
 	}
 
 	function getToken(uint256 tokenId) public view returns (TokenInfo memory) {
 		TokenMetadata memory metadata = tokenMetadata[tokenId];
-		SellingListing memory listing = sellingListing[tokenId];
+		SellingListing[] memory listings = sellingListings[tokenId][
+			metadata.timesSold
+		];
+
+		SellingListing memory listing;
+
+		if (listings.length > 0) {
+			listing = listings[listings.length - 1];
+		}
 
 		return
 			TokenInfo(
@@ -319,22 +364,25 @@ contract Encode is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable {
 			);
 	}
 
+	function getTokensOfOwner(
+		address addr
+	) public view returns (TokenInfo[] memory) {
+		uint256 balance = balanceOf(addr);
+		TokenInfo[] memory tokens = new TokenInfo[](balance);
+		for (uint256 i = 0; i < balance; i++) {
+			uint256 tokenId = tokenOfOwnerByIndex(addr, i);
+			tokens[i] = getToken(tokenId);
+		}
+
+		return tokens;
+	}
+
 	function listTokens() public view returns (TokenInfo[] memory) {
 		uint256 totalSupply = totalSupply();
 		TokenInfo[] memory tokens = new TokenInfo[](totalSupply);
 		for (uint256 i = 0; i < totalSupply; i++) {
 			uint256 tokenId = tokenByIndex(i);
-
-			TokenMetadata memory metadata = tokenMetadata[tokenId];
-			SellingListing memory listing = sellingListing[tokenId];
-
-			tokens[i] = TokenInfo(
-				tokenId,
-				tokenURI(tokenId),
-				ownerOf(tokenId),
-				metadata,
-				listing
-			);
+			tokens[i] = getToken(tokenId);
 		}
 
 		return tokens;
